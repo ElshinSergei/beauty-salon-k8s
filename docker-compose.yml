@@ -1,0 +1,258 @@
+services:
+  # База данных для user-service
+  user-db:
+    image: postgres:15-alpine
+    container_name: user-postgres-db
+    environment:
+      POSTGRES_DB: user_db
+      POSTGRES_USER: elshin_user
+      POSTGRES_PASSWORD: ${DB_USER_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - user_db_data:/var/lib/postgresql/data
+    networks:
+      - beauty-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U elshin_user -d user_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # База данных для booking-service
+  booking-db:
+    image: postgres:15-alpine
+    container_name: booking-postgres-db
+    environment:
+      POSTGRES_DB: booking_db
+      POSTGRES_USER: elshin_booking
+      POSTGRES_PASSWORD: ${DB_BOOKING_PASSWORD}
+    ports:
+      - "5433:5432" # Пробрасываем внутренний порт 5432 контейнера на внешний порт 5433 хоста
+    volumes:
+      - booking_db_data:/var/lib/postgresql/data
+    networks:
+      - beauty-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U elshin_booking -d booking_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    # Наш брокер сообщений RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: beauty_salon_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      # Разрешаем RabbitMQ использовать до 70% выделенной контейнеру памяти вместо 40%
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit vm_memory_high_watermark 0.7"
+    deploy:
+      resources:
+        limits:
+          memory: 512m # Жестко выделяем полгигабайта, из которых 75% пойдут RabbitMQ
+    ports:
+      - "5672:5672"   # Порт для подключения Spring Boot (AMQP)
+      - "15672:15672" # Веб-панель (Management)
+    networks:
+      - beauty-network
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  eureka-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: eureka-server
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    environment:
+      - SERVER_PORT=8761
+      - JAVA_OPTS=-Xmx200m -Xms200m # Ограничиваем кучу JVM до 200МБ
+    deploy:
+      resources:
+       limits:
+        memory: 350m
+    networks:
+      - beauty-network
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8761/" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # === ДОБАВЛЯЕМ НАШИ JAVA МИКРОСЕРВИСЫ ===
+
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: user-service
+    container_name: user-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SERVER_PORT=8081
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://user-db:5432/user_db
+      - SPRING_DATASOURCE_USERNAME=elshin_user
+      - SPRING_DATASOURCE_PASSWORD=${DB_USER_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - JAVA_OPTS=-Xmx256m -Xms256m # Для микросервисов с БД 256МБ вполне хватит локально
+    deploy:
+          resources:
+            limits:
+              memory: 400m
+    depends_on:
+      user-db:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - beauty-network
+
+  booking-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: booking-service
+    container_name: booking-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SERVER_PORT=8082
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://booking-db:5432/booking_db
+      - SPRING_DATASOURCE_USERNAME=elshin_booking
+      - SPRING_DATASOURCE_PASSWORD=${DB_BOOKING_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - JAVA_OPTS=-Xmx256m -Xms256m
+    deploy:
+      resources:
+        limits:
+          memory: 400m
+    depends_on:
+      booking-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - beauty-network
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: notification-service
+    container_name: notification-service
+    environment:
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_PORT=5672
+      # Прописываем путь к Эврике явным образом
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+      - JAVA_OPTS=-Xmx180m -Xms180m
+    deploy:
+      resources:
+        limits:
+          memory: 300m
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - beauty-network
+
+  gateway-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gateway-service
+    container_name: gateway-service
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - JAVA_OPTS=-Xmx180m -Xms180m # Гейтвей реактивный, ему много кучи не надо
+    deploy:
+      resources:
+       limits:
+        memory: 300m
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - beauty-network
+
+  # --- Observability Stack ---
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - beauty-network
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    networks:
+      - beauty-network
+    depends_on:
+      - prometheus
+
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - beauty-network
+
+  loki:
+    image: grafana/loki:3.0.0
+    command: -config.file=/etc/loki/config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml:ro
+    ports:
+      - "3100:3100"
+    networks:
+      - beauty-network
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./promtail-config.yaml:/etc/promtail/config.yaml:ro
+    command: -config.file=/etc/promtail/config.yaml
+    networks:
+      - beauty-network
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - beauty-network
+
+volumes:
+  user_db_data:
+  booking_db_data:
+
+networks:
+  beauty-network: # Общая сеть, чтобы контейнеры могли общаться друг с другом напрямую по именам сервисов
+    driver: bridge

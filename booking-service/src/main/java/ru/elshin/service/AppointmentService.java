@@ -1,0 +1,248 @@
+package ru.elshin.service;
+
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Service;
+import ru.elshin.client.UserClient;
+import ru.elshin.config.RabbitMQConfig;
+import ru.elshin.dto.AppointmentEvent;
+import ru.elshin.dto.AppointmentStatusChangedEvent;
+import ru.elshin.dto.UserDto;
+import ru.elshin.dto.saga.SendNotificationCommand;
+import ru.elshin.dto.saga.UserVerificationFailedEvent;
+import ru.elshin.dto.saga.UserVerifiedEvent;
+import ru.elshin.dto.saga.VerifyUserCommand;
+import ru.elshin.entity.Appointment;
+import ru.elshin.entity.AppointmentStatus;
+import ru.elshin.exception.AppointmentConflictException;
+import ru.elshin.exception.ResourceNotFoundException;
+import ru.elshin.repository.AppointmentRepository;
+
+import java.nio.file.AccessDeniedException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.List;
+import java.util.UUID;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AppointmentService {
+
+    private final AppointmentRepository appointmentRepository;
+    private final UserClient userClient; // Внедряем наш Feign-клиент
+    private final RabbitTemplate rabbitTemplate; // Внедряем шаблон для работы с RabbitMQ
+
+    @CacheEvict(value = "appointments_by_user", key = "#appointment.clientId")
+    @Transactional
+    public Appointment createAppointment(Appointment appointment) {
+        // 1. Проверяем существование клиента в user-service
+        UserDto client = userClient.getUserById(appointment.getClientId());
+        // 2. Проверяем существование мастера в user-service
+        UserDto master = userClient.getUserById(appointment.getMasterId());
+        // 3. Проверяем, действительно ли у мастера роль MASTER
+        if (!"MASTER".equalsIgnoreCase(master.getRole())) {
+            throw new AppointmentConflictException("Пользователь с ID " + appointment.getMasterId() + " не является мастером!");
+        }
+        // 4. Проверяем занятость мастера на это время
+        boolean isTimeBusy = appointmentRepository.existsByMasterIdAndAppointmentTime(
+                appointment.getMasterId(),
+                appointment.getAppointmentTime()
+        );
+
+        if (isTimeBusy) {
+            throw new AppointmentConflictException("Мастер уже занят на это время!");
+        }
+
+        appointment.setStatus(AppointmentStatus.PENDING);
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+
+        // Формируем событие для брокера
+        AppointmentEvent event = new AppointmentEvent(
+                savedAppointment.getId(),
+                savedAppointment.getClientId(),
+                savedAppointment.getServiceName(),
+                savedAppointment.getAppointmentTime().toString()
+        );
+
+        // Отправляем асинхронно в обменник с ключом маршрутизации
+        rabbitTemplate.convertAndSend(
+                RabbitMQConfig.EXCHANGE_NAME,
+                RabbitMQConfig.ROUTING_KEY_CREATED,
+                event
+        );
+
+        // 2. ОТПРАВЛЯЕМ КОМАНДУ ДЛЯ САГИ
+        VerifyUserCommand command = VerifyUserCommand.builder()
+                .correlationId(UUID.randomUUID())
+                .appointmentId(savedAppointment.getId())
+                .userId(savedAppointment.getClientId())
+                .build();
+
+        rabbitTemplate.convertAndSend(
+                RabbitMQConfig.USER_VERIFICATION_EXCHANGE,
+                RabbitMQConfig.VERIFY_USER_ROUTING_KEY,
+                command
+        );
+        log.info("Сага: Отправлена команда VerifyUserCommand для брони {}", savedAppointment.getId());
+
+        return savedAppointment;
+    }
+
+    public List<Appointment> getAllAppointments() {
+        return appointmentRepository.findAll();
+    }
+
+
+    // метод для получения ВСЕХ записей мастера
+    @Cacheable(value = "appointments_by_master", key = "#masterId")
+    public List<Appointment> getAppointmentsByMaster(Long masterId) {
+        return appointmentRepository.findByMasterId(masterId);
+    }
+
+    // метод для фильтрации по конкретному дню
+    public List<Appointment> getAppointmentsByMasterAndDate(Long masterId, LocalDate date) {
+        // Начало дня: 2026-07-20T00:00
+        LocalDateTime startOfDay = date.atStartOfDay();
+        // Конец дня: 2026-07-20T23:59:59.999999999
+        LocalDateTime endOfDay = date.atTime(LocalTime.MAX);
+
+        return appointmentRepository.findByMasterIdAndAppointmentTimeBetween(masterId, startOfDay, endOfDay);
+    }
+
+    /**
+     * Подтверждение записи мастером
+     */
+    // При подтверждении/отмене: очищаем кеш для мастера И клиента
+    @CacheEvict(value = {"appointments_by_master", "appointments_by_user"}, allEntries = true)
+    @Transactional
+    public Appointment confirmAppointment(Long id, Long currentUserId) {
+        Appointment appointment = appointmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Запись с ID " + id + " не найдена"));
+
+        // Проверяем, что подтвердить запись может ТОЛЬКО мастер этой записи
+        if (!appointment.getMasterId().equals(currentUserId)) {
+            throw new AppointmentConflictException("Только мастер этой записи может подтвердить её!");
+        }
+
+        // Валидация: подтвердить можно только запись в статусе PENDING
+        if (appointment.getStatus() != AppointmentStatus.PENDING) {
+            throw new AppointmentConflictException(
+                    "Нельзя подтвердить запись в статусе " + appointment.getStatus()
+            );
+        }
+
+        String previousStatus = appointment.getStatus().name();
+        appointment.setStatus(AppointmentStatus.CONFIRMED);
+        Appointment updated = appointmentRepository.save(appointment);
+
+        // Отправляем событие подтверждения в RabbitMQ
+        publishStatusChangeEvent(updated, previousStatus);
+
+        return updated;
+    }
+
+    /**
+     * Отмена записи
+     */
+    @Transactional
+    @CacheEvict(value = {"appointments_by_master", "appointments_by_user"}, allEntries = true)
+    public Appointment cancelAppointment(Long id, Long currentUserId) {
+        Appointment appointment = appointmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Запись с ID " + id + " не найдена"));
+
+        // Проверяем права на отмену (клиент или мастер)
+        if (!appointment.getClientId().equals(currentUserId) && !appointment.getMasterId().equals(currentUserId)) {
+            throw new AppointmentConflictException("У вас нет прав для отмены этой записи");
+        }
+
+        // Валидация: нельзя отменить то, что уже выполнено (COMPLETED) или отменено (CANCELLED)
+        if (appointment.getStatus() == AppointmentStatus.COMPLETED) {
+            throw new AppointmentConflictException("Нельзя отменить уже выполненную запись!");
+        }
+        if (appointment.getStatus() == AppointmentStatus.CANCELLED) {
+            throw new AppointmentConflictException("Запись уже была отменена ранее!");
+        }
+
+        String previousStatus = appointment.getStatus().name();
+        appointment.setStatus(AppointmentStatus.CANCELLED);
+        Appointment updated = appointmentRepository.save(appointment);
+
+        publishStatusChangeEvent(updated, previousStatus);
+
+        return updated;
+    }
+
+    @Cacheable(value = "appointments_by_user", key = "#userId")
+    public List<Appointment> getAppointmentsByUserId(Long userId) {
+        return appointmentRepository.findByClientId(userId);
+    }
+
+    /**
+     * Вспомогательный метод для публикации событий смены статуса
+     */
+    private void publishStatusChangeEvent(Appointment appointment, String previousStatus) {
+        AppointmentStatusChangedEvent event = AppointmentStatusChangedEvent.builder()
+                .appointmentId(appointment.getId())
+                .clientId(appointment.getClientId())
+                .masterId(appointment.getMasterId())
+                .serviceName(appointment.getServiceName())
+                .appointmentTime(appointment.getAppointmentTime())
+                .previousStatus(previousStatus)
+                .newStatus(appointment.getStatus().name())
+                .build();
+
+        rabbitTemplate.convertAndSend(
+                RabbitMQConfig.EXCHANGE_NAME,
+                RabbitMQConfig.ROUTING_KEY_STATUS_CHANGED,
+                event
+        );
+        log.info("Отправлено событие смены статуса записи №{}: {} -> {}",
+                appointment.getId(), previousStatus, appointment.getStatus());
+    }
+
+    @Transactional
+    public void handleUserVerified(UserVerifiedEvent event) {
+        Appointment appointment = appointmentRepository.findById(event.getAppointmentId())
+                .orElseThrow(() -> new ResourceNotFoundException("Бронь не найдена: " + event.getAppointmentId()));
+
+        // Переход к следующему состоянию
+        appointment.setStatus(AppointmentStatus.VERIFIED);
+        appointmentRepository.save(appointment);
+
+        log.info("Appointment {} verified successfully.", appointment.getId());
+
+        // ОТПРАВКА КОМАНДЫ НА УВЕДОМЛЕНИЕ
+        SendNotificationCommand command = SendNotificationCommand.builder()
+                .correlationId(event.getCorrelationId()) // Передаем тот же ID
+                .appointmentId(appointment.getId())
+                .userId(appointment.getClientId())
+                .message("Ваша запись подтверждена!")
+                .build();
+
+        rabbitTemplate.convertAndSend(RabbitMQConfig.NOTIFICATION_EXCHANGE,
+                RabbitMQConfig.SEND_NOTIFICATION_ROUTING_KEY,
+                command);
+
+        log.info("Sent SendNotificationCommand for appointment: {}", appointment.getId());
+    }
+
+    @Transactional
+    public void handleUserVerificationFailed(UserVerificationFailedEvent event) {
+        Appointment appointment = appointmentRepository.findById(event.getAppointmentId())
+                .orElseThrow(() -> new ResourceNotFoundException("Бронь не найдена: " + event.getAppointmentId()));
+
+        // Переход в статус отмены (компенсация)
+        appointment.setStatus(AppointmentStatus.CANCELLED);
+        appointmentRepository.save(appointment);
+
+        log.warn("Appointment {} cancelled due to verification failure: {}",
+                appointment.getId(), event.getReason());
+    }
+
+}
