@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: booking-db
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: booking-db
+  clusterIP: None # Headless service для StatefulSet
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: booking-db
+spec:
+  serviceName: "booking-db"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: booking-db
+  template:
+    metadata:
+      labels:
+        app: booking-db
+    spec:
+      containers:
+        - name: booking-db
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_DB
+              value: booking_db
+            - name: POSTGRES_USER
+              value: elshin_booking
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-passwords
+                  key: booking-db-password
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: booking-db-data # Имя из volumeClaimTemplates
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: booking-db-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
