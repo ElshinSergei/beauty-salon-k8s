@@ -1,0 +1,14 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: salon-gateway
+spec:
+  selector:
+    istio: ingressgateway # использует стандартный ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*" # В проде здесь должен быть ваш домен, например: salon.com

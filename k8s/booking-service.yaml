@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking-service
+  labels:
+    app: booking-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: booking-service
+  template:
+    metadata:
+      labels:
+        app: booking-service
+    spec:
+      containers:
+        - name: booking-service
+          image: booking-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8082
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://booking-db:5432/booking_db"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "elshin_booking"
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-passwords
+                  key: booking-db-password
+            - name: SPRING_RABBITMQ_HOST
+              value: "rabbitmq"
+            - name: SPRING_DATA_REDIS_HOST
+              value: "redis"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            initialDelaySeconds: 60
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: booking-service
+spec:
+  selector:
+    app: booking-service
+  ports:
+    - protocol: TCP
+      port: 8082
+      targetPort: 8082
+  type: ClusterIP

@@ -30,8 +30,6 @@ spec:
                 secretKeyRef:
                   name: db-passwords
                   key: user-db-password
-            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
-              value: "http://eureka-server:8761/eureka/"
           readinessProbe:
             httpGet:
               path: /actuator/health

@@ -12,22 +12,16 @@ import ru.elshin.config.RabbitMQConfig;
 import ru.elshin.dto.AppointmentEvent;
 import ru.elshin.dto.AppointmentStatusChangedEvent;
 import ru.elshin.dto.UserDto;
-import ru.elshin.dto.saga.SendNotificationCommand;
-import ru.elshin.dto.saga.UserVerificationFailedEvent;
-import ru.elshin.dto.saga.UserVerifiedEvent;
-import ru.elshin.dto.saga.VerifyUserCommand;
 import ru.elshin.entity.Appointment;
 import ru.elshin.entity.AppointmentStatus;
 import ru.elshin.exception.AppointmentConflictException;
 import ru.elshin.exception.ResourceNotFoundException;
 import ru.elshin.repository.AppointmentRepository;
 
-import java.nio.file.AccessDeniedException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -76,20 +70,6 @@ public class AppointmentService {
                 RabbitMQConfig.ROUTING_KEY_CREATED,
                 event
         );
-
-        // 2. ОТПРАВЛЯЕМ КОМАНДУ ДЛЯ САГИ
-        VerifyUserCommand command = VerifyUserCommand.builder()
-                .correlationId(UUID.randomUUID())
-                .appointmentId(savedAppointment.getId())
-                .userId(savedAppointment.getClientId())
-                .build();
-
-        rabbitTemplate.convertAndSend(
-                RabbitMQConfig.USER_VERIFICATION_EXCHANGE,
-                RabbitMQConfig.VERIFY_USER_ROUTING_KEY,
-                command
-        );
-        log.info("Сага: Отправлена команда VerifyUserCommand для брони {}", savedAppointment.getId());
 
         return savedAppointment;
     }
@@ -204,45 +184,6 @@ public class AppointmentService {
         );
         log.info("Отправлено событие смены статуса записи №{}: {} -> {}",
                 appointment.getId(), previousStatus, appointment.getStatus());
-    }
-
-    @Transactional
-    public void handleUserVerified(UserVerifiedEvent event) {
-        Appointment appointment = appointmentRepository.findById(event.getAppointmentId())
-                .orElseThrow(() -> new ResourceNotFoundException("Бронь не найдена: " + event.getAppointmentId()));
-
-        // Переход к следующему состоянию
-        appointment.setStatus(AppointmentStatus.VERIFIED);
-        appointmentRepository.save(appointment);
-
-        log.info("Appointment {} verified successfully.", appointment.getId());
-
-        // ОТПРАВКА КОМАНДЫ НА УВЕДОМЛЕНИЕ
-        SendNotificationCommand command = SendNotificationCommand.builder()
-                .correlationId(event.getCorrelationId()) // Передаем тот же ID
-                .appointmentId(appointment.getId())
-                .userId(appointment.getClientId())
-                .message("Ваша запись подтверждена!")
-                .build();
-
-        rabbitTemplate.convertAndSend(RabbitMQConfig.NOTIFICATION_EXCHANGE,
-                RabbitMQConfig.SEND_NOTIFICATION_ROUTING_KEY,
-                command);
-
-        log.info("Sent SendNotificationCommand for appointment: {}", appointment.getId());
-    }
-
-    @Transactional
-    public void handleUserVerificationFailed(UserVerificationFailedEvent event) {
-        Appointment appointment = appointmentRepository.findById(event.getAppointmentId())
-                .orElseThrow(() -> new ResourceNotFoundException("Бронь не найдена: " + event.getAppointmentId()));
-
-        // Переход в статус отмены (компенсация)
-        appointment.setStatus(AppointmentStatus.CANCELLED);
-        appointmentRepository.save(appointment);
-
-        log.warn("Appointment {} cancelled due to verification failure: {}",
-                appointment.getId(), event.getReason());
     }
 
 }
