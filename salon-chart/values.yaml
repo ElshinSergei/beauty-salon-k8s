@@ -1,0 +1,32 @@
+userService:
+  replicaCount: 1
+  image:
+    repository: user-service
+    tag: latest
+  service:
+    port: 8081
+  virtualService:
+    timeout: 3s
+    retries:
+      attempts: 3
+      perTryTimeout: 1s
+
+bookingService:
+  replicaCount: 1
+  image:
+    repository: booking-service
+    tag: latest
+  service:
+    port: 8082
+
+notificationService:
+  replicaCount: 1
+  image:
+    repository: notification-service
+    tag: latest
+  service:
+    port: 8083
+
+gateway:
+  enabled: true
+  host: "*"

@@ -1,0 +1,9 @@
+rabbitmq:
+  auth:
+    username: guest
+    password: guest
+  replicaCount: 1
+
+redis:
+  auth:
+    enabled: false

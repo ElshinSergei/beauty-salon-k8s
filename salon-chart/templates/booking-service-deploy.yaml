@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking-service
+spec:
+  replicas: {{ .Values.bookingService.replicaCount }}
+  selector:
+    matchLabels:
+      app: booking-service
+  template:
+    metadata:
+      labels:
+        app: booking-service
+    spec:
+      containers:
+        - name: booking-service
+          image: {{ .Values.bookingService.image.repository }}:{{ .Values.bookingService.image.tag }}
+          imagePullPolicy: Never
+          ports:
+            - containerPort: {{ .Values.bookingService.service.port }}
+          # Тут можно добавить env, livenessProbe и т.д.
