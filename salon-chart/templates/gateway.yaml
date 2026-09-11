@@ -1,4 +1,5 @@
 {{- if .Values.gateway.enabled }}
+
 apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:
@@ -13,4 +14,46 @@ spec:
         protocol: HTTP
       hosts:
         - {{ .Values.gateway.host | quote }}
-{{- end }}
+
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: gateway-vs
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - salon-gateway
+  http:
+    # Маршрут для пользователей
+    - match:
+        - uri:
+            prefix: "/api/users"
+      route:
+        - destination:
+            host: user-service
+            port:
+              number: {{ .Values.userService.service.port }}
+
+    # Маршрут для бронирований
+    - match:
+        - uri:
+            prefix: "/api/booking"
+      route:
+        - destination:
+            host: booking-service
+            port:
+              number: {{ .Values.bookingService.service.port }}
+
+    # Маршрут для уведомлений
+    - match:
+        - uri:
+            prefix: "/api/notifications"
+      route:
+        - destination:
+            host: notification-service
+            port:
+              number: {{ .Values.notificationService.service.port }}
+    {{- end }}
+

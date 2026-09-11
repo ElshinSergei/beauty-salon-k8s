@@ -18,4 +18,22 @@ spec:
           imagePullPolicy: Never
           ports:
             - containerPort: {{ .Values.bookingService.service.port }}
-          # Тут можно добавить env, livenessProbe и т.д.
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://booking-db:5432/booking_db
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+
+---
+# 2. Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: booking-service
+spec:
+  ports:
+    - port: {{ .Values.bookingService.service.port }}
+      targetPort: {{ .Values.bookingService.service.port }}
+      name: http
+  selector:
+    app: booking-service

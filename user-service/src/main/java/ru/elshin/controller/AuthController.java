@@ -13,7 +13,7 @@ import ru.elshin.dto.RegisterRequest;
 import ru.elshin.service.AuthService;
 
 @RestController
-@RequestMapping("/api/v1/auth")
+@RequestMapping("/api/auth")
 @RequiredArgsConstructor
 @Tag(name = "Auth Controller", description = "API для аутентификации и регистрации")
 public class AuthController {

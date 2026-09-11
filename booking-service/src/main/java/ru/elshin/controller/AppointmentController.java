@@ -15,7 +15,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/appointments")
+@RequestMapping("/api/appointments")
 @RequiredArgsConstructor
 @Tag(name = "Appointments", description = "API для управления записями") // Аннотация для контроллера
 public class AppointmentController {

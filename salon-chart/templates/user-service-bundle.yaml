@@ -1,0 +1,61 @@
+# 1. Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+spec:
+  replicas: {{ .Values.userService.replicaCount }}
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+        - name: user-service
+          image: {{ .Values.userService.image.repository }}:{{ .Values.userService.image.tag }}
+          imagePullPolicy: Never
+          ports:
+            - containerPort: {{ .Values.userService.service.port }}
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://user-db:5432/user_db
+            - name: SPRING_REDIS_HOST
+              value: redis
+
+---
+# 2. Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+spec:
+  ports:
+    - port: {{ .Values.userService.service.port }}
+      targetPort: {{ .Values.userService.service.port }}
+      name: http
+  selector:
+    app: user-service
+
+---
+# 3. VirtualService (Istio)
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: user-service-vs
+spec:
+  hosts:
+    - user-service # Внутри Mesh достаточно имени сервиса
+  http:
+    - route:
+        - destination:
+            host: user-service
+            port:
+              number: {{ .Values.userService.service.port }}
+      timeout: {{ .Values.userService.virtualService.timeout }}
+      retries:
+        attempts: {{ .Values.userService.virtualService.retries.attempts }}
+        perTryTimeout: {{ .Values.userService.virtualService.retries.perTryTimeout }}
+        retryOn: gateway-error,connect-failure,refused-stream

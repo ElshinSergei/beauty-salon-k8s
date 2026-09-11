@@ -19,3 +19,17 @@ spec:
           ports:
             - containerPort: {{ .Values.notificationService.service.port }}
           # Тут можно добавить env, livenessProbe и т.д.
+
+---
+# 2. Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+spec:
+  ports:
+    - port: {{ .Values.notificationService.service.port }}
+      targetPort: {{ .Values.notificationService.service.port }}
+      name: http
+  selector:
+    app: notification-service

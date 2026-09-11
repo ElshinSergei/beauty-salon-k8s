@@ -1,81 +1,72 @@
-# Appointment Tracker System
+# Cloud-Native Appointment Tracker System
 
-Система микросервисной архитектуры для управления записью клиентов в салон красоты. Проект спроектирован с упором на отказоустойчивость, консистентность данных и наблюдаемость (observability).
+Система микросервисной архитектуры для управления записью клиентов в салон красоты. Проект спроектирован с упором на отказоустойчивость, безопасность и наблюдаемость (observability) в среде **Kubernetes**.
 
-## 🏗️ Архитектура
+## 🏗️ Архитектура (Modernized)
 
-Система построена на микросервисной архитектуре и включает в себя два основных уровня:
-
-- **Control Plane (Infrastructure):** Обеспечивает Service Discovery через **Eureka Server** и комплексный мониторинг состояния системы с помощью стека **Observability** (Prometheus, Grafana, Loki, Zipkin).
-- **Data & Application Plane:** Реализует бизнес-логику, где `Booking Service` выступает в роли оркестратора паттерна **Saga**, управляя асинхронными транзакциями через **RabbitMQ**, а также интегрирует кэширование и ограничение нагрузки через **Redis**.
+Система развернута в кластере Kubernetes с использованием **Istio Service Mesh**. Вместо классического Java API Gateway маршрутизация трафика осуществляется на уровне Ingress Gateway через `VirtualService`, что является современным стандартом для Cloud-Native систем.
 
 ```mermaid
-graph TD
-    subgraph Control_Plane [Infrastructure Plane]
-        Eureka[Eureka Server]
-        Obs[Observability: Prom/Graf/Loki/Zipkin]
-    end
-
-    Gateway[Gateway Service] -- Rate Limiting --> Redis[(Redis)]
-    Gateway -.-> Eureka
-    Gateway --> User[User Service]
-    Gateway --> Booking[Booking Service]
-    
-    User -- Caching --> Redis
-    User -- Saga Participant --> Rabbit((RabbitMQ))
-    User --> UserDB[(Postgres)]
-    User -.-> Eureka
-    
-    Booking -- Caching --> Redis
-    Booking -- Saga Orchestrator --> Rabbit
-    Booking --> BookingDB[(Postgres)]
-    Booking -.-> Eureka
-    
-    Rabbit -- Events --> Notification[Notification Service]
-    Notification -- Saga Participant --> Rabbit
-    Notification -.-> Eureka
+graph LR
+    User((Client)) --> |http| IGW[Istio Ingress Gateway]
+    IGW --> |VirtualService routing| US[User Service]
+    IGW --> |VirtualService routing| BS[Booking Service]
+    IGW --> |VirtualService routing| NS[Notification Service]
+    US --> DB1[(Postgres)]
+    BS --> DB2[(Postgres)]
+    BS --> R((RabbitMQ))
+    R --> NS
+    US <--> Redis[(Redis)]
 ```
 
-## 🚀 Основные особенности (Features)
+## 🚀 Основные особенности
 
-- **Микросервисная архитектура**: Разделение ответственности между `user-service`, `booking-service`, `notification-service` и `gateway-service`.
-- **Saga Pattern**: Реализация распределенных транзакций через брокер сообщений (RabbitMQ) для обеспечения консистентности данных при записи на прием.
-- **Отказоустойчивость**: Использование Eureka Server для Service Discovery и клиентской балансировки нагрузки.
-- **Производительность**: Кеширование данных пользователей и расписания в Redis с поддержкой TTL и инвалидацией данных (Cache-Aside pattern).
-- **Безопасность**: API Gateway в качестве центральной точки входа, JWT-аутентификация и ограничение частоты запросов (**Rate Limiting**).
-- **Observability (Мониторинг)**: Централизованный сбор логов (Loki), метрик (Prometheus + Grafana) и трейсинг запросов (Zipkin).
-- **CI/CD**: Автоматизированный процесс сборки и тестирования с использованием GitHub Actions.
+- **Kubernetes-native**: Развертывание осуществляется через Helm-чарты.
+- **Service Mesh (Istio)**: Управление трафиком, отказоустойчивость (retries, timeouts), безопасность (mTLS).
+- **Istio-as-Gateway**: Маршрутизация внешнего трафика напрямую в микросервисы средствами Service Mesh.
+- **Event-Driven Notifications**: Использование RabbitMQ для асинхронной отправки уведомлений о записях.
+- **Observability**: Полный стек мониторинга (Prometheus, Grafana, Loki).
 
 ## 🛠️ Технологический стек
 
-*   **Core**: Java 17/21, Spring Boot 3
-*   **Microservices**: Spring Cloud (Gateway, Eureka, OpenFeign)
+*   **Core**: Java 21, Spring Boot 3
+*   **Infrastructure**: Kubernetes, Helm, Istio (Service Mesh)
 *   **Messaging**: RabbitMQ
 *   **Database**: PostgreSQL
-*   **Caching & Rate Limiting**: Redis
-*   **Observability**: Prometheus, Grafana, Loki, Promtail, Zipkin
-*   **Deployment**: Docker Compose
-*   **CI/CD**: GitHub Actions
-*   **Testing**: JUnit 5, Mockito, Testcontainers
+*   **Caching**: Redis
+*   **Observability**: Prometheus, Grafana, Loki
 
-## ⚙️ Инструкция по запуску
+## ⚙️ Инструкция по развертыванию
 
-Для запуска всей инфраструктуры достаточно выполнить одну команду:
+1. **Подготовка кластера**:
+   Убедитесь, что у вас запущен кластер Kubernetes (например, Minikube).
 
-```bash
-docker-compose up -d
-```
+2. **Установка Istio**:
+   Используйте локальный бинарный файл `istioctl` из директории `istio-1.23.0`:
+   ```bash
+   istioctl install --set profile=demo -y
+   kubectl label namespace default istio-injection=enabled
+   ```
 
-Сервисы будут доступны на портах:
-- **API Gateway**: `localhost:8080`
-- **API Documentation (Swagger UI)**: `http://localhost:8080/swagger-ui.html`
-- **Grafana**: `localhost:3000`
-- **Prometheus**: `localhost:9090`
-- **RabbitMQ Management**: `localhost:15672`
+3. **Сборка и загрузка образов**:
+   Соберите образы для сервисов и загрузите их в Minikube:
+   ```bash
+   # Пример для user-service
+   docker build --target user-service -t user-service:latest .
+   minikube image load user-service:latest
+   ```
 
-## 🛡️ Безопасность и конфигурация
+4. **Установка Helm-чарта**:
+   ```bash
+   helm install salon-app ./salon-chart/
+   ```
 
-*Для запуска используется файл `.env` для управления секретами (пароли к базам данных, API ключи), который исключен из системы контроля версий Git.*
+5. **Доступ к системе**:
+   Запустите туннель для доступа к Ingress Gateway:
+   ```bash
+   minikube tunnel
+   ```
+   Система будет доступна по адресу `http://localhost/api/...`
 
 ## 📄 Дополнительно
-Данный проект является демонстрационным, созданным для отображения навыков проектирования современных распределенных систем.
+Данный проект является демонстрацией навыков проектирования современных распределенных систем, перенесенных с legacy-инфраструктуры (Docker Compose) на Kubernetes + Service Mesh.

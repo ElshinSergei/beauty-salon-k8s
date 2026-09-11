@@ -13,7 +13,7 @@ import ru.elshin.service.UserService;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/users")
+@RequestMapping("/api/users")
 @RequiredArgsConstructor
 @Tag(name = "User Controller", description = "API для управления пользователями")
 public class UserController {
