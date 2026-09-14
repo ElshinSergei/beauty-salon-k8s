@@ -26,6 +26,18 @@ spec:
   gateways:
     - salon-gateway
   http:
+    # Маршрут для Temporal UI
+    - match:
+        - uri:
+            prefix: "/temporal"
+      rewrite:
+        uri: "/" # Temporal UI ждет запросы на корень, а мы идем по /temporal
+      route:
+        - destination:
+            host: temporal # Имя вашего Service Temporal
+            port:
+              number: 8233
+
     # Маршрут для пользователей
     - match:
         - uri:
@@ -55,5 +67,7 @@ spec:
             host: notification-service
             port:
               number: {{ .Values.notificationService.service.port }}
+
+        # Маршрут для Temporal UI
     {{- end }}
 

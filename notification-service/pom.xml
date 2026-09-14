@@ -18,12 +18,6 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Работа с RabbitMQ -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-amqp</artifactId>
-        </dependency>
-
         <!-- Утилиты -->
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -54,6 +48,12 @@
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.temporal</groupId>
+            <artifactId>temporal-sdk</artifactId>
+            <version>1.25.0</version>
         </dependency>
 
     </dependencies>

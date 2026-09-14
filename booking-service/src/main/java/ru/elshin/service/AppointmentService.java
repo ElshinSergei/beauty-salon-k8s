@@ -1,22 +1,21 @@
 package ru.elshin.service;
 
+import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowOptions;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import ru.elshin.client.UserClient;
-import ru.elshin.config.RabbitMQConfig;
-import ru.elshin.dto.AppointmentEvent;
-import ru.elshin.dto.AppointmentStatusChangedEvent;
 import ru.elshin.dto.UserDto;
 import ru.elshin.entity.Appointment;
 import ru.elshin.entity.AppointmentStatus;
 import ru.elshin.exception.AppointmentConflictException;
 import ru.elshin.exception.ResourceNotFoundException;
 import ru.elshin.repository.AppointmentRepository;
+import ru.elshin.workflow.NotificationWorkflow;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -30,7 +29,7 @@ public class AppointmentService {
 
     private final AppointmentRepository appointmentRepository;
     private final UserClient userClient; // Внедряем наш Feign-клиент
-    private final RabbitTemplate rabbitTemplate; // Внедряем шаблон для работы с RabbitMQ
+    private final WorkflowClient workflowClient;
 
     @CacheEvict(value = "appointments_by_user", key = "#appointment.clientId")
     @Transactional
@@ -56,20 +55,14 @@ public class AppointmentService {
         appointment.setStatus(AppointmentStatus.PENDING);
         Appointment savedAppointment = appointmentRepository.save(appointment);
 
-        // Формируем событие для брокера
-        AppointmentEvent event = new AppointmentEvent(
-                savedAppointment.getId(),
-                savedAppointment.getClientId(),
-                savedAppointment.getServiceName(),
-                savedAppointment.getAppointmentTime().toString()
-        );
+        NotificationWorkflow workflow = workflowClient.newWorkflowStub(
+                NotificationWorkflow.class,
+                WorkflowOptions.newBuilder()
+                        .setTaskQueue("NOTIFICATION_TASK_QUEUE")
+                        .build());
 
-        // Отправляем асинхронно в обменник с ключом маршрутизации
-        rabbitTemplate.convertAndSend(
-                RabbitMQConfig.EXCHANGE_NAME,
-                RabbitMQConfig.ROUTING_KEY_CREATED,
-                event
-        );
+        // Запускаем асинхронно
+        WorkflowClient.start(workflow::sendNotification, "Запись создана", savedAppointment.getClientId().toString());
 
         return savedAppointment;
     }
@@ -121,8 +114,6 @@ public class AppointmentService {
         appointment.setStatus(AppointmentStatus.CONFIRMED);
         Appointment updated = appointmentRepository.save(appointment);
 
-        // Отправляем событие подтверждения в RabbitMQ
-        publishStatusChangeEvent(updated, previousStatus);
 
         return updated;
     }
@@ -153,37 +144,12 @@ public class AppointmentService {
         appointment.setStatus(AppointmentStatus.CANCELLED);
         Appointment updated = appointmentRepository.save(appointment);
 
-        publishStatusChangeEvent(updated, previousStatus);
-
         return updated;
     }
 
     @Cacheable(value = "appointments_by_user", key = "#userId")
     public List<Appointment> getAppointmentsByUserId(Long userId) {
         return appointmentRepository.findByClientId(userId);
-    }
-
-    /**
-     * Вспомогательный метод для публикации событий смены статуса
-     */
-    private void publishStatusChangeEvent(Appointment appointment, String previousStatus) {
-        AppointmentStatusChangedEvent event = AppointmentStatusChangedEvent.builder()
-                .appointmentId(appointment.getId())
-                .clientId(appointment.getClientId())
-                .masterId(appointment.getMasterId())
-                .serviceName(appointment.getServiceName())
-                .appointmentTime(appointment.getAppointmentTime())
-                .previousStatus(previousStatus)
-                .newStatus(appointment.getStatus().name())
-                .build();
-
-        rabbitTemplate.convertAndSend(
-                RabbitMQConfig.EXCHANGE_NAME,
-                RabbitMQConfig.ROUTING_KEY_STATUS_CHANGED,
-                event
-        );
-        log.info("Отправлено событие смены статуса записи №{}: {} -> {}",
-                appointment.getId(), previousStatus, appointment.getStatus());
     }
 
 }

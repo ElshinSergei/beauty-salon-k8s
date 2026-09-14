@@ -1,0 +1,26 @@
+server:
+  replicaCount: 1
+  image:
+    tag: 1.25.0
+  config:
+    persistence:
+      defaultStore: default
+      datastores:
+        default:
+          sql:
+            pluginName: "postgres"
+            host: "temporal-postgresql"
+            databaseName: "temporal"
+            username: "temporal"
+            password: "temporal_password"
+        visibility:
+          sql:
+            pluginName: "postgres"
+            host: "temporal-postgresql"
+            databaseName: "temporal_visibility"
+            username: "temporal"
+            password: "temporal_password"
+ui:
+  enabled: true
+postgresql:
+  enabled: true
