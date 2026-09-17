@@ -10,6 +10,13 @@ userService:
     retries:
       attempts: 3
       perTryTimeout: 1s
+  resources:
+    requests:
+      memory: "250Mi"
+      cpu: "200m"
+    limits:
+      memory: "500Mi"
+      cpu: "800m"
 
 bookingService:
   replicaCount: 1
@@ -18,6 +25,13 @@ bookingService:
     tag: latest
   service:
     port: 8082
+  resources:
+    requests:
+      memory: "300Mi"
+      cpu: "200m"
+    limits:
+      memory: "600Mi"
+      cpu: "800m"
 
 notificationService:
   replicaCount: 1
@@ -26,6 +40,13 @@ notificationService:
     tag: latest
   service:
     port: 8083
+  resources:
+    requests:
+      memory: "200Mi"
+      cpu: "200m"
+    limits:
+      memory: "400Mi"
+      cpu: "800m"
 
 gateway:
   enabled: true

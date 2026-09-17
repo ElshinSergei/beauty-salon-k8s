@@ -31,6 +31,8 @@ spec:
                   key: user-db-password
             - name: SPRING_REDIS_HOST
               value: redis
+          resources:
+              {{- toYaml .Values.userService.resources | nindent 12 }}
 {{/*          livenessProbe:*/}}
 {{/*            httpGet:*/}}
 {{/*              path: /actuator/health*/}}

@@ -28,6 +28,8 @@ spec:
                 secretKeyRef:
                   name: db-passwords
                   key: booking-db-password
+          resources:
+                      {{- toYaml .Values.bookingService.resources | nindent 12 }}
 {{/*          livenessProbe:*/}}
 {{/*            httpGet:*/}}
 {{/*              path: /actuator/health*/}}

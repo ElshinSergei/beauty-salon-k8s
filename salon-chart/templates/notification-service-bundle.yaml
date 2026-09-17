@@ -18,6 +18,8 @@ spec:
           imagePullPolicy: Never
           ports:
             - containerPort: {{ .Values.notificationService.service.port }}
+          resources:
+            {{- toYaml .Values.notificationService.resources | nindent 12 }}
 {{/*          livenessProbe:*/}}
 {{/*            httpGet:*/}}
 {{/*              path: /actuator/health*/}}
