@@ -68,6 +68,16 @@ spec:
             port:
               number: {{ .Values.notificationService.service.port }}
 
-        # Маршрут для Temporal UI
+    - match:
+        - uri:
+            prefix: "/kiali"
+      rewrite:
+        uri: "/"
+      route:
+        - destination:
+            host: kiali
+            port:
+              number: 20001
+
     {{- end }}
 

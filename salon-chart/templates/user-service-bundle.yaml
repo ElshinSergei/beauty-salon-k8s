@@ -22,8 +22,27 @@ spec:
           env:
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://user-db:5432/user_db
+            - name: SPRING_DATASOURCE_USERNAME
+              value: elshin_user
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-passwords
+                  key: user-db-password
             - name: SPRING_REDIS_HOST
               value: redis
+{{/*          livenessProbe:*/}}
+{{/*            httpGet:*/}}
+{{/*              path: /actuator/health*/}}
+{{/*              port: {{ .Values.userService.service.port }}*/}}
+{{/*            initialDelaySeconds: 120*/}}
+{{/*            periodSeconds: 90*/}}
+{{/*          readinessProbe:*/}}
+{{/*            httpGet:*/}}
+{{/*              path: /actuator/health*/}}
+{{/*              port: {{ .Values.userService.service.port }}*/}}
+{{/*            initialDelaySeconds: 90*/}}
+{{/*            periodSeconds: 10*/}}
 
 ---
 # 2. Service

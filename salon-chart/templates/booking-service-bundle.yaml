@@ -21,8 +21,25 @@ spec:
           env:
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://booking-db:5432/booking_db
-            - name: SPRING_RABBITMQ_HOST
-              value: rabbitmq
+            - name: SPRING_DATASOURCE_USERNAME
+              value: elshin_booking
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-passwords
+                  key: booking-db-password
+{{/*          livenessProbe:*/}}
+{{/*            httpGet:*/}}
+{{/*              path: /actuator/health*/}}
+{{/*              port: {{ .Values.bookingService.service.port }}*/}}
+{{/*            initialDelaySeconds: 120*/}}
+{{/*            periodSeconds: 20*/}}
+{{/*          readinessProbe:*/}}
+{{/*            httpGet:*/}}
+{{/*              path: /actuator/health*/}}
+{{/*              port: {{ .Values.bookingService.service.port }}*/}}
+{{/*            initialDelaySeconds: 50*/}}
+{{/*            periodSeconds: 10*/}}
 
 ---
 # 2. Service

@@ -1,0 +1,12 @@
+dependencies:
+- name: prometheus
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 25.27.0
+- name: grafana
+  repository: https://grafana.github.io/helm-charts
+  version: 8.5.0
+- name: kiali-server
+  repository: https://kiali.org/helm-charts
+  version: 2.5.0
+digest: sha256:f50d9f3825065c9976662866f80e1d425c6a619d46904b094f5144c605b0fb0b
+generated: "2026-09-17T14:40:03.6424525+03:00"

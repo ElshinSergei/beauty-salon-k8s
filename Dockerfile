@@ -17,6 +17,9 @@ COPY user-service/src ./user-service/src
 COPY booking-service/src ./booking-service/src
 COPY notification-service/src ./notification-service/src
 
+# Force invalidation
+RUN echo "Invalidating cache"
+
 RUN mvn clean package -DskipTests
 
 # --- ЭТАПЫ ДЛЯ КОНКРЕТНЫХ СЕРВИСОВ ---

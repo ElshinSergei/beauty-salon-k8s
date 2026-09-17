@@ -3,7 +3,6 @@ package ru.elshin.controller;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -44,8 +43,6 @@ class AppointmentControllerIntegrationTest {
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("eureka.client.enabled", () -> "false");
-        registry.add("spring.rabbitmq.host", () -> "localhost"); // Заглушка
-        registry.add("spring.rabbitmq.port", () -> 5672);       // Несуществующий порт
     }
 
     @Autowired
@@ -56,9 +53,6 @@ class AppointmentControllerIntegrationTest {
 
     @MockBean
     private UserClient userClient;
-
-    @MockBean
-    private RabbitTemplate rabbitTemplate;
 
     @BeforeEach
     void setUp() {

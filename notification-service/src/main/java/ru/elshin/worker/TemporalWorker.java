@@ -14,15 +14,17 @@ import ru.elshin.workflow.NotificationWorkflowImpl;
 public class TemporalWorker {
 
     private final WorkflowClient workflowClient;
+    private final NotificationActivityImpl activity;
     private WorkerFactory factory;
 
     @Autowired
-    public TemporalWorker(WorkflowClient workflowClient) {
+    public TemporalWorker(WorkflowClient workflowClient, NotificationActivityImpl activity) {
         this.workflowClient = workflowClient;
+        this.activity = activity;
     }
 
     @PostConstruct // Использовать аннотацию, чтобы запустить при старте
-    public void startWorker(NotificationActivityImpl activity) {
+    public void initWorker() {
 
         this.factory = WorkerFactory.newInstance(workflowClient);
 

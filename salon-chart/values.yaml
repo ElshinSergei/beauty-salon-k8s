@@ -30,3 +30,22 @@ notificationService:
 gateway:
   enabled: true
   host: "*"
+
+prometheus:
+  serviceAccounts:
+    server:
+      create: true
+      name: prometheus-server
+
+kiali-server:
+  auth:
+    strategy: "anonymous" # Для локальной разработки без логина
+  deployment:
+    accessible_namespaces:
+      - "default"
+  external_services:
+    prometheus:
+      # Указываем имя сервиса, который создаст Helm-чарт Prometheus
+      url: "http://salon-app-prometheus-server.default.svc.cluster.local:80"
+    istio:
+      root_namespace: "istio-system"

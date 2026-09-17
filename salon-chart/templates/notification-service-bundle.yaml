@@ -18,8 +18,19 @@ spec:
           imagePullPolicy: Never
           ports:
             - containerPort: {{ .Values.notificationService.service.port }}
-          # Тут можно добавить env, livenessProbe и т.д.
-
+{{/*          livenessProbe:*/}}
+{{/*            httpGet:*/}}
+{{/*              path: /actuator/health*/}}
+{{/*              port: {{ .Values.notificationService.service.port }}*/}}
+{{/*            initialDelaySeconds: 40*/}}
+{{/*            periodSeconds: 10*/}}
+{{/*          readinessProbe:*/}}
+{{/*            httpGet:*/}}
+{{/*              path: /actuator/health*/}}
+{{/*              port: {{ .Values.notificationService.service.port }}*/}}
+{{/*            initialDelaySeconds: 60*/}}
+{{/*            periodSeconds: 10*/}}
+{{/*            failureThreshold: 5*/}}
 ---
 # 2. Service
 apiVersion: v1
