@@ -1,5 +1,6 @@
 package ru.elshin.controller;
 
+import io.temporal.client.WorkflowClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -21,6 +22,7 @@ import ru.elshin.dto.UserDto;
 import ru.elshin.entity.Appointment;
 import ru.elshin.entity.AppointmentStatus;
 import ru.elshin.repository.AppointmentRepository;
+import ru.elshin.workflow.NotificationWorkflow;
 
 import java.time.LocalDateTime;
 
@@ -42,7 +44,6 @@ class AppointmentControllerIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("eureka.client.enabled", () -> "false");
     }
 
     @Autowired
@@ -54,6 +55,12 @@ class AppointmentControllerIntegrationTest {
     @MockBean
     private UserClient userClient;
 
+    @MockBean
+    private WorkflowClient workflowClient;
+
+    @MockBean
+    private NotificationWorkflow notificationWorkflow;
+
     @BeforeEach
     void setUp() {
         appointmentRepository.deleteAll();
@@ -61,13 +68,18 @@ class AppointmentControllerIntegrationTest {
         UserDto mockMaster = new UserDto(2L, "Master", "master@test.com", "MASTER");
         Mockito.when(userClient.getUserById(1L)).thenReturn(mockUser);
         Mockito.when(userClient.getUserById(2L)).thenReturn(mockMaster);
+
+        Mockito.when(workflowClient.newWorkflowStub(
+                Mockito.eq(NotificationWorkflow.class),
+                Mockito.any(io.temporal.client.WorkflowOptions.class)
+        )).thenReturn(notificationWorkflow);
     }
 
     @Test
     void createAppointment_ShouldReturnCreated() throws Exception {
         String json = "{\"masterId\": 2, \"serviceName\": \"Haircut\", \"appointmentTime\": \"2026-08-25T10:00:00\"}";
 
-        mockMvc.perform(post("/api/v1/appointments")
+        mockMvc.perform(post("/api/appointments")
                 .header("X-User-Id", 1L)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
@@ -87,7 +99,7 @@ class AppointmentControllerIntegrationTest {
 
         String json = "{\"masterId\": 2, \"serviceName\": \"Haircut\", \"appointmentTime\": \"2026-08-25T10:00:00\"}";
 
-        mockMvc.perform(post("/api/v1/appointments")
+        mockMvc.perform(post("/api/appointments")
                 .header("X-User-Id", 3L)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
@@ -102,7 +114,7 @@ class AppointmentControllerIntegrationTest {
                 .status(AppointmentStatus.PENDING).build();
         Appointment saved = appointmentRepository.save(appointment);
 
-        mockMvc.perform(patch("/api/v1/appointments/" + saved.getId() + "/confirm")
+        mockMvc.perform(patch("/api/appointments/" + saved.getId() + "/confirm")
                 .header("X-User-Id", 2L)) // Мастер подтверждает
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CONFIRMED"));
@@ -116,7 +128,7 @@ class AppointmentControllerIntegrationTest {
                 .status(AppointmentStatus.CONFIRMED).build(); // Уже подтверждена
         Appointment saved = appointmentRepository.save(appointment);
 
-        mockMvc.perform(patch("/api/v1/appointments/" + saved.getId() + "/confirm")
+        mockMvc.perform(patch("/api/appointments/" + saved.getId() + "/confirm")
                 .header("X-User-Id", 2L))
                 .andExpect(status().isConflict());
     }
@@ -129,7 +141,7 @@ class AppointmentControllerIntegrationTest {
                 .status(AppointmentStatus.PENDING).build();
         Appointment saved = appointmentRepository.save(appointment);
 
-        mockMvc.perform(patch("/api/v1/appointments/" + saved.getId() + "/confirm")
+        mockMvc.perform(patch("/api/appointments/" + saved.getId() + "/confirm")
                 .header("X-User-Id", 1L)) // Пытается подтвердить клиент
                 .andExpect(status().isConflict());
     }

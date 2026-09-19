@@ -28,7 +28,6 @@ class AuthControllerIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("eureka.client.enabled", () -> "false");
     }
 
     @Autowired
@@ -38,7 +37,7 @@ class AuthControllerIntegrationTest {
     void register_ShouldReturnCreated() throws Exception {
         String json = "{\"name\": \"Test User\", \"email\": \"test@test.com\", \"password\": \"password123\", \"phone\": \"+79998887766\", \"role\": \"CLIENT\"}";
 
-        mockMvc.perform(post("/api/v1/auth/register")
+        mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json))
                 .andExpect(status().isCreated())
@@ -49,13 +48,13 @@ class AuthControllerIntegrationTest {
     void login_ShouldReturnToken() throws Exception {
         // Сначала регистрируем
         String registerJson = "{\"name\": \"Test User\", \"email\": \"login@test.com\", \"password\": \"pass123\", \"phone\": \"+79998887766\", \"role\": \"CLIENT\"}";
-        mockMvc.perform(post("/api/v1/auth/register")
+        mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(registerJson));
 
         // Затем логинимся
         String loginJson = "{\"email\": \"login@test.com\", \"password\": \"pass123\"}";
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(loginJson))
                 .andExpect(status().isOk())
