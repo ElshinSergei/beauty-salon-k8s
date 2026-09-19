@@ -1,7 +1,7 @@
 userService:
   replicaCount: 1
   image:
-    repository: user-service
+    repository: ghcr.io/elshinsergei/user-service
     tag: latest
   service:
     port: 8081
@@ -21,7 +21,7 @@ userService:
 bookingService:
   replicaCount: 1
   image:
-    repository: booking-service
+    repository: ghcr.io/elshinsergei/booking-service
     tag: latest
   service:
     port: 8082
@@ -36,7 +36,7 @@ bookingService:
 notificationService:
   replicaCount: 1
   image:
-    repository: notification-service
+    repository: ghcr.io/elshinsergei/notification-service
     tag: latest
   service:
     port: 8083

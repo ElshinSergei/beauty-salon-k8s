@@ -15,7 +15,7 @@ spec:
       containers:
         - name: notification-service
           image: {{ .Values.notificationService.image.repository }}:{{ .Values.notificationService.image.tag }}
-          imagePullPolicy: Never
+          imagePullPolicy: Always
           ports:
             - containerPort: {{ .Values.notificationService.service.port }}
           resources:
