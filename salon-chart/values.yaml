@@ -34,7 +34,7 @@ bookingService:
       cpu: "800m"
 
 notificationService:
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: ghcr.io/elshinsergei/notification-service
     tag: latest
