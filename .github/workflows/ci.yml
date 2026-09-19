@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Важно: нужно для пуша в GitHub Container Registry
 
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +26,28 @@ jobs:
       # Запускаем сборку и тесты
       - name: Build and Test
         run: mvn clean install -Dtestcontainers.enabled=true
+
+      - name: Login to GitHub Container Registry
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+            # Сборка и пуш для каждого сервиса
+      - name: Build and Push Docker Images
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        run: |
+            # Собираем образы, указывая --target для каждого из этапов в Dockerfile
+            docker build --target user-service -t ghcr.io/${{ github.repository }}/user-service:latest .
+            docker build --target booking-service -t ghcr.io/${{ github.repository }}/booking-service:latest .
+            docker build --target notification-service -t ghcr.io/${{ github.repository }}/notification-service:latest .
+                        
+            # Пушим их
+            docker push ghcr.io/${{ github.repository }}/user-service:latest
+            docker push ghcr.io/${{ github.repository }}/booking-service:latest
+            docker push ghcr.io/${{ github.repository }}/notification-service:latest
 
 
 
