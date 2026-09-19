@@ -39,15 +39,18 @@ jobs:
       - name: Build and Push Docker Images
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
         run: |
-            # Собираем образы, указывая --target для каждого из этапов в Dockerfile
-            docker build --target user-service -t ghcr.io/${{ github.repository }}/user-service:latest .
-            docker build --target booking-service -t ghcr.io/${{ github.repository }}/booking-service:latest .
-            docker build --target notification-service -t ghcr.io/${{ github.repository }}/notification-service:latest .
-                        
-            # Пушим их
-            docker push ghcr.io/${{ github.repository }}/user-service:latest
-            docker push ghcr.io/${{ github.repository }}/booking-service:latest
-            docker push ghcr.io/${{ github.repository }}/notification-service:latest
+          # Преобразуем имя репозитория в нижний регистр
+          REPO_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          
+          # Собираем образы, используя переменную REPO_NAME
+          docker build --target user-service -t ghcr.io/$REPO_NAME/user-service:latest .
+          docker build --target booking-service -t ghcr.io/$REPO_NAME/booking-service:latest .
+          docker build --target notification-service -t ghcr.io/$REPO_NAME/notification-service:latest .
+          
+          # Пушим их
+          docker push ghcr.io/$REPO_NAME/user-service:latest
+          docker push ghcr.io/$REPO_NAME/booking-service:latest
+          docker push ghcr.io/$REPO_NAME/notification-service:latest
 
 
 
