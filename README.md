@@ -8,33 +8,38 @@
 
 ```mermaid
 graph LR
-    User((Client)) --> |http| IGW[Istio Ingress Gateway]
-    IGW --> |VirtualService| US[User Service]
-    IGW --> |VirtualService| BS[Booking Service]
-    IGW --> |VirtualService| NS[Notification Service]
-    BS --> |Temporal Workflow| TS((Temporal Server))
-    TS --> |Worker Execution| NS
+    Git[GitHub Repo] --> |Sync| AC[ArgoCD]
+    AC --> |Deploy| IGW[Istio Ingress Gateway]
     
-    subgraph Data
-        US --> DB1[(Postgres)]
-        BS --> DB2[(Postgres)]
-        US <--> Redis[(Redis)]
-        BS <--> Redis
+    User((Client)) --> |http| IGW
+    
+    subgraph K8s
+        IGW --> |VirtualService| US[User Service]
+        IGW --> |VirtualService| BS[Booking Service]
+        IGW --> |VirtualService| NS[Notification Service]
+        BS --> |Temporal Workflow| TS((Temporal Server))
+        
+        subgraph Data
+            US --> DB1[(Postgres)]
+            BS --> DB2[(Postgres)]
+            US <--> Redis[(Redis)]
+            BS <--> Redis
+        end
+        
+        subgraph Observability
+            Prom[Prometheus]
+            Graf[Grafana]
+            Lok[Loki]
+            Kia[Kiali]
+        end
+        
+        US & BS & NS --> Prom
+        US & BS & NS --> Lok
+        US & BS & NS -.-> Kia
+        Prom --> Graf
+        Lok --> Graf
+        Kia --> |Mesh Viz| Prom
     end
-    
-    subgraph Observability
-        Prom[Prometheus]
-        Graf[Grafana]
-        Lok[Loki]
-        Kia[Kiali]
-    end
-    
-    US & BS & NS --> Prom
-    US & BS & NS --> Lok
-    US & BS & NS -.-> Kia
-    Prom --> Graf
-    Lok --> Graf
-    Kia --> |Mesh Viz| Prom
 ```
 
 ## 🚀 Основные особенности
@@ -59,16 +64,11 @@ graph LR
 1. **Подготовка кластера**:
    Убедитесь, что у вас запущен кластер Kubernetes (например, Minikube).
 
-2. **Установка Istio**:
-   Если `istioctl` не добавлен в PATH, используйте путь к файлу из проекта:
-   ```bash
-   # Для Windows (PowerShell):
-   .\istio-1.23.0\bin\istioctl.exe install --set profile=demo -y
-   
-   # Или если istioctl уже в PATH:
-   istioctl install --set profile=demo -y
-   
-   kubectl label namespace default istio-injection=enabled
+2. **Автоматическая настройка инфраструктуры**:
+   В проекте предусмотрен скрипт для автоматизации установки Istio и ArgoCD.
+   ```powershell
+   # Запуск скрипта подготовки кластера (Windows PowerShell):
+   .\setup_cluster.ps1
    ```
 
 3. **Создание секретов**:
@@ -77,7 +77,14 @@ graph LR
    kubectl create secret generic db-passwords --from-literal=user-db-password=secret_password --from-literal=booking-db-password=booking_password
    ```
 
-4. **Установка приложения**:
+4. **GitOps управление с ArgoCD**:
+   После успешной настройки инфраструктуры, используйте ArgoCD для развертывания приложения:
+   - Откройте ArgoCD UI: `kubectl port-forward svc/argocd-server -n argocd 8080:443`
+   - Перейдите на `https://localhost:8080` (логин: `admin`, пароль можно получить через команду, выведенную скриптом `setup_cluster.ps1`).
+   - Добавьте репозиторий проекта и создайте Application, указав путь `salon-chart`.
+   - Включите **Automatic Sync** для автоматического обновления приложения при каждом `git push`.
+
+4. **Установка приложения (ручной метод)**:
    ```bash
    helm install salon-app ./salon-chart/
    ```

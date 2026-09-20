@@ -21,7 +21,13 @@ kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 helm repo add argo https://argoproj.github.io/argo-helm --force-update
 helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace
 
-# 3. Information
+# 3. Create Database Secrets
+Write-Host ">>> Creating Database Secrets..." -ForegroundColor Yellow
+kubectl create secret generic db-passwords `
+    --from-literal=user-db-password=secret_password `
+    --from-literal=booking-db-password=booking_password --dry-run=client -o yaml | kubectl apply -f -
+
+# 4. Information
 Write-Host "--- Infrastructure ready! ---" -ForegroundColor Green
 Write-Host "You can deploy your application with:" -ForegroundColor Cyan
 Write-Host "helm install salon-app ./salon-chart" -ForegroundColor White
