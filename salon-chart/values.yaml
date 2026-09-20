@@ -1,7 +1,7 @@
 userService:
   replicaCount: 1
   image:
-    repository: ghcr.io/elshinsergei/user-service
+    repository: ghcr.io/elshinsergei/beauty-salon-k8s/user-service
     tag: latest
   service:
     port: 8081
@@ -21,7 +21,7 @@ userService:
 bookingService:
   replicaCount: 1
   image:
-    repository: ghcr.io/elshinsergei/booking-service
+    repository: ghcr.io/elshinsergei/beauty-salon-k8s/booking-service
     tag: latest
   service:
     port: 8082
@@ -34,9 +34,9 @@ bookingService:
       cpu: "800m"
 
 notificationService:
-  replicaCount: 2
+  replicaCount: 1
   image:
-    repository: ghcr.io/elshinsergei/notification-service
+    repository: ghcr.io/elshinsergei/beauty-salon-k8s/notification-service
     tag: latest
   service:
     port: 8083

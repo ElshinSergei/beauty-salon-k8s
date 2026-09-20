@@ -15,7 +15,7 @@ spec:
       containers:
         - name: booking-service
           image: {{ .Values.bookingService.image.repository }}:{{ .Values.bookingService.image.tag }}
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: {{ .Values.bookingService.service.port }}
           env:
