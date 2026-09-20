@@ -8,6 +8,8 @@ import ru.elshin.dto.AuthResponse;
 import ru.elshin.dto.RegisterRequest;
 import ru.elshin.entity.Role;
 import ru.elshin.entity.User;
+import ru.elshin.exception.AuthenticationException;
+import ru.elshin.exception.UserAlreadyExistsException;
 import ru.elshin.repository.UserRepository;
 import ru.elshin.utils.JwtUtil;
 
@@ -21,7 +23,7 @@ public class AuthService {
 
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.email())) {
-            throw new RuntimeException("Email already in use");
+            throw new UserAlreadyExistsException("Email already in use");
         }
 
         // Выбираем роль из запроса или ставим CLIENT/USER по умолчанию
@@ -43,10 +45,10 @@ public class AuthService {
 
     public AuthResponse login(AuthRequest request) {
         User user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+                .orElseThrow(() -> new AuthenticationException("Invalid email or password"));
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            throw new RuntimeException("Invalid email or password");
+            throw new AuthenticationException("Invalid email or password");
         }
 
         String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name());
