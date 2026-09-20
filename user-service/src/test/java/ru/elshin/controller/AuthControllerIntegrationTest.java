@@ -45,6 +45,22 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    void register_ShouldReturnConflict_WhenEmailExists() throws Exception {
+        String json = "{\"name\": \"Test User\", \"email\": \"existing@test.com\", \"password\": \"password123\", \"phone\": \"+79998887766\", \"role\": \"CLIENT\"}";
+        
+        // Первый раз успешно
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json));
+
+        // Второй раз - конфликт
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void login_ShouldReturnToken() throws Exception {
         // Сначала регистрируем
         String registerJson = "{\"name\": \"Test User\", \"email\": \"login@test.com\", \"password\": \"pass123\", \"phone\": \"+79998887766\", \"role\": \"CLIENT\"}";
@@ -59,5 +75,21 @@ class AuthControllerIntegrationTest {
                 .content(loginJson))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").exists());
+    }
+
+    @Test
+    void login_ShouldReturnUnauthorized_WhenWrongPassword() throws Exception {
+        // Регистрируем
+        String registerJson = "{\"name\": \"Test User\", \"email\": \"wrongpass@test.com\", \"password\": \"correctPass\", \"phone\": \"+79998887766\", \"role\": \"CLIENT\"}";
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(registerJson));
+
+        // Логинимся с неправильным паролем
+        String loginJson = "{\"email\": \"wrongpass@test.com\", \"password\": \"wrongPass\"}";
+        mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(loginJson))
+                .andExpect(status().isUnauthorized());
     }
 }
